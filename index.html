@@ -1,0 +1,200 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aim Key Panel</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #101827;
+      color: white;
+      padding: 20px;
+    }
+    .box {
+      background: #1e293b;
+      padding: 18px;
+      border-radius: 12px;
+      margin-bottom: 15px;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 12px;
+      margin: 7px 0;
+      border: 0;
+      border-radius: 7px;
+      box-sizing: border-box;
+    }
+    button {
+      background: #2563eb;
+      color: white;
+      font-weight: bold;
+    }
+    .danger { background: #dc2626; }
+    .key {
+      background: #334155;
+      padding: 12px;
+      border-radius: 8px;
+      margin: 10px 0;
+      overflow-wrap: anywhere;
+    }
+    #panel { display: none; }
+  </style>
+</head>
+<body>
+
+<h2>🎯 Aim Key Panel</h2>
+
+<div class="box" id="login">
+  <h3>Owner Login</h3>
+  <input id="email" type="email" placeholder="Owner Email">
+  <input id="password" type="password" placeholder="Password">
+  <button id="loginBtn">Login</button>
+  <p id="message"></p>
+</div>
+
+<div id="panel">
+  <div class="box">
+    <h3>Generate New Key</h3>
+    <select id="duration">
+      <option value="1 day">1 Day</option>
+      <option value="3 days">3 Days</option>
+      <option value="7 days">7 Days</option>
+    </select>
+    <button id="generateBtn">Generate Key</button>
+    <p id="generated"></p>
+  </div>
+
+  <div class="box">
+    <h3>All Keys</h3>
+    <div id="keyList">Loading...</div>
+  </div>
+
+  <button class="danger" id="logoutBtn">Logout</button>
+</div>
+
+<script type="module">
+import { initializeApp } from
+"https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+
+import {
+  getAuth, signInWithEmailAndPassword,
+  onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
+
+import {
+  getFirestore, collection, addDoc,
+  onSnapshot, doc, updateDoc, deleteDoc,
+  serverTimestamp, Timestamp
+} from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDVMBnPcoYhPETcWdumwOapeCL4CL9KkpQ",
+  authDomain: "aim-key-panel.firebaseapp.com",
+  projectId: "aim-key-panel",
+  storageBucket: "aim-key-panel.firebasestorage.app",
+  messagingSenderId: "924992222369",
+  appId: "1:924992222369:web:4d9024327ee31d1fd0ece0"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const loginBox = document.getElementById("login");
+const panel = document.getElementById("panel");
+const message = document.getElementById("message");
+
+document.getElementById("loginBtn").onclick = async () => {
+  try {
+    await signInWithEmailAndPassword(
+      auth,
+      document.getElementById("email").value,
+      document.getElementById("password").value
+    );
+    message.textContent = "Login successful";
+  } catch (e) {
+    message.textContent = e.message;
+  }
+};
+
+onAuthStateChanged(auth, user => {
+  loginBox.style.display = user ? "none" : "block";
+  panel.style.display = user ? "block" : "none";
+});
+
+function makeKey() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  return Array.from(bytes, b => chars[b % chars.length]).join("");
+}
+
+document.getElementById("generateBtn").onclick = async () => {
+  try {
+    const duration = document.getElementById("duration").value;
+    const days = duration.startsWith("1") ? 1 :
+                 duration.startsWith("3") ? 3 : 7;
+    const key = "AIM-" + makeKey();
+
+    const expires = new Date();
+    expires.setDate(expires.getDate() + days);
+
+    await addDoc(collection(db, "keys"), {
+      key: key,
+      active: true,
+      duration: duration,
+      createdAt: serverTimestamp(),
+      expiresAt: Timestamp.fromDate(expires)
+    });
+
+    document.getElementById("generated").textContent =
+      "New Key: " + key;
+  } catch (e) {
+    alert(e.message);
+  }
+};
+
+onSnapshot(collection(db, "keys"), snapshot => {
+  const list = document.getElementById("keyList");
+  list.innerHTML = "";
+
+  snapshot.forEach(item => {
+    const data = item.data();
+    const div = document.createElement("div");
+    div.className = "key";
+
+    const title = document.createElement("b");
+    title.textContent = data.key || "Unknown key";
+
+    const status = document.createElement("p");
+    status.textContent = "Duration: " + (data.duration || "-") +
+      " | Status: " + (data.active ? "Active" : "Inactive");
+
+    const toggle = document.createElement("button");
+    toggle.textContent = data.active ? "Deactivate" : "Activate";
+    toggle.onclick = () => updateDoc(
+      doc(db, "keys", item.id),
+      { active: !data.active }
+    );
+
+    const remove = document.createElement("button");
+    remove.textContent = "Delete Key";
+    remove.className = "danger";
+    remove.onclick = async () => {
+      if (confirm("Delete this key?")) {
+        await deleteDoc(doc(db, "keys", item.id));
+      }
+    };
+
+    div.append(title, status, toggle, remove);
+    list.appendChild(div);
+  });
+}, error => {
+  document.getElementById("keyList").textContent = error.message;
+});
+
+document.getElementById("logoutBtn").onclick = () => signOut(auth);
+</script>
+
+</body>
+</html>
